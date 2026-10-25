@@ -14,11 +14,3 @@
 # Local files
 uploads/
 TestPackage/
-
-# Prebuilt JAR is copied by Dockerfile
-src/
-pom.xml
-mvnw
-mvnw.cmd
-.mvn/
-README.md
