@@ -5,18 +5,18 @@ public class QuestionResponse {
     private Long id;
     private String question;
     private String difficulty;
-    private Long documentChunkId;
+    private Long documentId;
 
     public QuestionResponse(
             Long id,
             String question,
             String difficulty,
-            Long documentChunkId) {
+            Long documentId) {
 
         this.id = id;
         this.question = question;
         this.difficulty = difficulty;
-        this.documentChunkId = documentChunkId;
+        this.documentId = documentId;
     }
 
     public Long getId() {
@@ -31,7 +31,7 @@ public class QuestionResponse {
         return difficulty;
     }
 
-    public Long getDocumentChunkId() {
-        return documentChunkId;
+    public Long getDocumentId() {
+        return documentId;
     }
 }

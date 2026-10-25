@@ -29,11 +29,11 @@ public class QuestionController {
         );
     }
 
-    @GetMapping("/chunks/{chunkId}")
-    public List<QuestionResponse> getQuestionsByChunk(
-            @PathVariable Long chunkId) {
+    @GetMapping("/documents/{documentId}")
+    public List<QuestionResponse> getQuestionsByDocument(
+            @PathVariable Long documentId) {
 
-        return questionService.getQuestionsByChunk(chunkId);
+        return questionService.getQuestionsByDocument(documentId);
     }
 
     @PostMapping("/generate/chunks/{chunkId}")
@@ -46,7 +46,7 @@ public class QuestionController {
     @PostMapping("/generate/documents/{documentId}")
     public List<QuestionResponse> generateQuestionsForDocument(
             @PathVariable Long documentId,
-            @RequestParam(defaultValue = "30") int count) {
+            @RequestParam(defaultValue = "3") int count) {
 
         return questionService.generateQuestionsForDocument(
                 documentId,

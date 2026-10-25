@@ -11,8 +11,8 @@ public class Question {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "document_chunk_id", nullable = false)
-    private DocumentChunk documentChunk;
+    @JoinColumn(name = "document_id", nullable = false)
+    private Document document;
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String question;
@@ -27,12 +27,12 @@ public class Question {
         return id;
     }
 
-    public DocumentChunk getDocumentChunk() {
-        return documentChunk;
+    public Document getDocument() {
+        return document;
     }
 
-    public void setDocumentChunk(DocumentChunk documentChunk) {
-        this.documentChunk = documentChunk;
+    public void setDocument(Document document) {
+        this.document = document;
     }
 
     public String getQuestion() {

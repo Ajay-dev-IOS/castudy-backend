@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface QuestionRepository extends JpaRepository<Question, Long> {
 
-    List<Question> findByDocumentChunkId(Long documentChunkId);
+    List<Question> findByDocumentId(Long documentId);
 
-    void deleteByDocumentChunkId(Long documentChunkId);
+    void deleteByDocumentId(Long documentId);
 }

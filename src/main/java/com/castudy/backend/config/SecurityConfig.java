@@ -49,7 +49,7 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 HttpMethod.POST,
-                                "/subjects"
+                                "/api/v1/subjects"
                         ).hasRole("ADMIN")
 
                         .anyRequest().authenticated()

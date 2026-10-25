@@ -1,12 +1,15 @@
 package com.castudy.backend.service;
 
 import com.castudy.backend.dto.QuestionResponse;
+import com.castudy.backend.entity.Document;
 import com.castudy.backend.entity.DocumentChunk;
 import com.castudy.backend.entity.Question;
 import com.castudy.backend.repository.DocumentChunkRepository;
+import com.castudy.backend.repository.DocumentRepository;
 import com.castudy.backend.repository.QuestionRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -14,15 +17,18 @@ public class QuestionService {
 
     private final QuestionRepository questionRepository;
     private final DocumentChunkRepository documentChunkRepository;
+    private final DocumentRepository documentRepository;
     private final AiQuestionGenerationService aiQuestionGenerationService;
 
     public QuestionService(
             QuestionRepository questionRepository,
             DocumentChunkRepository documentChunkRepository,
+            DocumentRepository documentRepository,
             AiQuestionGenerationService aiQuestionGenerationService) {
 
         this.questionRepository = questionRepository;
         this.documentChunkRepository = documentChunkRepository;
+        this.documentRepository = documentRepository;
         this.aiQuestionGenerationService = aiQuestionGenerationService;
     }
 
@@ -39,7 +45,7 @@ public class QuestionService {
 
         Question question = new Question();
 
-        question.setDocumentChunk(documentChunk);
+        question.setDocument(documentChunk.getDocument());
         question.setQuestion(questionText);
         question.setDifficulty(difficulty);
 
@@ -50,27 +56,27 @@ public class QuestionService {
                 savedQuestion.getId(),
                 savedQuestion.getQuestion(),
                 savedQuestion.getDifficulty(),
-                documentChunkId
+                documentChunk.getDocument().getId()
         );
     }
 
-    public List<QuestionResponse> getQuestionsByChunk(
-            Long documentChunkId) {
+    public List<QuestionResponse> getQuestionsByDocument(
+            Long documentId) {
 
-        if (!documentChunkRepository.existsById(documentChunkId)) {
+        if (!documentRepository.existsById(documentId)) {
             throw new RuntimeException(
-                    "Document chunk not found");
+                    "Document not found");
         }
 
         return questionRepository
-                .findByDocumentChunkId(documentChunkId)
+                .findByDocumentId(documentId)
                 .stream()
                 .map(question ->
                         new QuestionResponse(
                                 question.getId(),
                                 question.getQuestion(),
                                 question.getDifficulty(),
-                                documentChunkId
+                                documentId
                         ))
                 .toList();
     }
@@ -87,13 +93,14 @@ public class QuestionService {
                 aiQuestionGenerationService
                         .generateQuestions(documentChunk);
 
-        List<QuestionResponse> responses = new java.util.ArrayList<>();
+        List<QuestionResponse> responses =
+                new ArrayList<>();
 
         for (String questionText : generatedQuestions) {
 
             Question question = new Question();
 
-            question.setDocumentChunk(documentChunk);
+            question.setDocument(documentChunk.getDocument());
             question.setQuestion(questionText);
             question.setDifficulty("MEDIUM");
 
@@ -105,7 +112,7 @@ public class QuestionService {
                             savedQuestion.getId(),
                             savedQuestion.getQuestion(),
                             savedQuestion.getDifficulty(),
-                            chunkId
+                            documentChunk.getDocument().getId()
                     )
             );
         }
@@ -127,6 +134,12 @@ public class QuestionService {
                     "Question count cannot exceed 100");
         }
 
+        Document document =
+                documentRepository.findById(documentId)
+                        .orElseThrow(() ->
+                                new RuntimeException(
+                                        "Document not found"));
+
         List<DocumentChunk> chunks =
                 documentChunkRepository
                         .findByDocumentIdOrderByChunkIndexAsc(documentId);
@@ -144,17 +157,13 @@ public class QuestionService {
                         );
 
         List<QuestionResponse> responses =
-                new java.util.ArrayList<>();
+                new ArrayList<>();
 
         for (String questionText : generatedQuestions) {
 
             Question question = new Question();
 
-            /*
-             * At this point the AI question is document-level,
-             * so we don't yet know which specific chunk produced it.
-             */
-            question.setDocumentChunk(null);
+            question.setDocument(document);
             question.setQuestion(questionText);
             question.setDifficulty("MEDIUM");
 
@@ -166,13 +175,11 @@ public class QuestionService {
                             savedQuestion.getId(),
                             savedQuestion.getQuestion(),
                             savedQuestion.getDifficulty(),
-                            null
+                            documentId
                     )
             );
         }
 
         return responses;
     }
-
-
 }
