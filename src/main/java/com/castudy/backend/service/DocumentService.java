@@ -99,7 +99,7 @@ public class DocumentService {
         List<String> chunks =
                 textChunkingService.chunk(cleanedText);
 
-        // Remove old chunks if document is reprocessed
+        // Remove existing chunks before inserting new chunks
         documentChunkRepository.deleteByDocumentId(documentId);
 
         // Persist new chunks
@@ -274,7 +274,7 @@ public class DocumentService {
     }
 
     // Get document text chunks
-    @Transactional
+    @Transactional(readOnly = true)
     public List<String> getTextChunks(Long documentId) {
 
         if (!documentRepository.existsById(documentId)) {
