@@ -1,3 +1,4 @@
+
 package com.castudy.backend.service;
 
 import org.apache.pdfbox.Loader;
@@ -6,15 +7,13 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.nio.file.Path;
 
 @Service
 public class PdfTextExtractionService {
 
-    public String extractText(Path pdfPath) {
+    public String extractText(byte[] pdfBytes) {
 
-        try (PDDocument document =
-                     Loader.loadPDF(pdfPath.toFile())) {
+        try (PDDocument document = Loader.loadPDF(pdfBytes)) {
 
             PDFTextStripper pdfTextStripper =
                     new PDFTextStripper();

@@ -1,29 +1,27 @@
+
 package com.castudy.backend.service;
 
 import com.castudy.backend.dto.DocumentResponse;
 import com.castudy.backend.entity.Document;
 import com.castudy.backend.entity.DocumentContent;
+import com.castudy.backend.entity.DocumentChunk;
 import com.castudy.backend.entity.Subject;
+
 import com.castudy.backend.repository.DocumentContentRepository;
 import com.castudy.backend.repository.DocumentRepository;
 import com.castudy.backend.repository.SubjectRepository;
-import org.springframework.beans.factory.annotation.Value;
+import com.castudy.backend.repository.DocumentChunkRepository;
+
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-import com.castudy.backend.repository.DocumentChunkRepository;
-import com.castudy.backend.entity.DocumentChunk;
 import org.springframework.transaction.annotation.Transactional;
-
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -41,10 +39,7 @@ public class DocumentService {
     private final TextCleaningService textCleaningService;
     private final TextChunkingService textChunkingService;
     private final DocumentChunkRepository documentChunkRepository;
-
-
-    @Value("${file.upload-dir}")
-    private String uploadDir;
+    private final SupabaseStorageService supabaseStorageService;
 
     public DocumentService(
             DocumentRepository documentRepository,
@@ -53,7 +48,8 @@ public class DocumentService {
             DocumentContentRepository documentContentRepository,
             TextCleaningService textCleaningService,
             TextChunkingService textChunkingService,
-            DocumentChunkRepository documentChunkRepository) {
+            DocumentChunkRepository documentChunkRepository,
+            SupabaseStorageService supabaseStorageService) {
 
         this.documentRepository = documentRepository;
         this.subjectRepository = subjectRepository;
@@ -62,8 +58,10 @@ public class DocumentService {
         this.textCleaningService = textCleaningService;
         this.textChunkingService = textChunkingService;
         this.documentChunkRepository = documentChunkRepository;
+        this.supabaseStorageService = supabaseStorageService;
     }
 
+    // Extract PDF text and generate chunks
     @Transactional
     public String extractText(Long documentId) {
 
@@ -72,10 +70,15 @@ public class DocumentService {
                         .orElseThrow(() ->
                                 new RuntimeException("Document not found"));
 
-        Path path = Paths.get(document.getFilePath());
+        // Download PDF from Supabase
+        byte[] pdfBytes =
+                supabaseStorageService.downloadFile(
+                        document.getFilePath()
+                );
 
+        // Extract text from PDF bytes
         String extractedText =
-                pdfTextExtractionService.extractText(path);
+                pdfTextExtractionService.extractText(pdfBytes);
 
         String cleanedText =
                 textCleaningService.clean(extractedText);
@@ -96,7 +99,7 @@ public class DocumentService {
         List<String> chunks =
                 textChunkingService.chunk(cleanedText);
 
-        // Remove old chunks if the document is re-processed
+        // Remove old chunks if document is reprocessed
         documentChunkRepository.deleteByDocumentId(documentId);
 
         // Persist new chunks
@@ -115,6 +118,7 @@ public class DocumentService {
         return cleanedText;
     }
 
+    // Upload PDF to Supabase and save metadata in PostgreSQL
     public DocumentResponse uploadDocument(
             Long subjectId,
             MultipartFile file) {
@@ -143,35 +147,41 @@ public class DocumentService {
                     "File name is required");
         }
 
-        String originalFileName =
-                file.getOriginalFilename();
-
-        String storedFileName =
-                UUID.randomUUID() + ".pdf";
-
-        Path uploadPath = Paths.get(uploadDir);
-        Path targetPath =
-                uploadPath.resolve(storedFileName);
-
-        try {
-            Files.createDirectories(uploadPath);
-            file.transferTo(targetPath);
-
-        } catch (IOException e) {
-            throw new RuntimeException(
-                    "Failed to store file", e);
-        }
-
         Subject subject =
                 subjectRepository.findById(subjectId)
                         .orElseThrow(() ->
                                 new RuntimeException(
                                         "Subject not found"));
 
+        String originalFileName =
+                file.getOriginalFilename();
+
+        String storedFileName =
+                UUID.randomUUID() + ".pdf";
+
+        try {
+            byte[] fileBytes = file.getBytes();
+
+            // Upload PDF to Supabase Storage
+            supabaseStorageService.uploadFile(
+                    fileBytes,
+                    storedFileName,
+                    file.getContentType()
+            );
+
+        } catch (IOException e) {
+            throw new RuntimeException(
+                    "Failed to read uploaded PDF", e);
+        }
+
+        // Save document metadata in PostgreSQL
         Document document = new Document();
 
         document.setFileName(originalFileName);
-        document.setFilePath(targetPath.toString());
+
+        // Store Supabase object name instead of local file path
+        document.setFilePath(storedFileName);
+
         document.setContentType(file.getContentType());
         document.setFileSize(file.getSize());
         document.setUploadedAt(Instant.now());
@@ -190,6 +200,7 @@ public class DocumentService {
         );
     }
 
+    // Get documents by subject
     public List<DocumentResponse> getDocumentsBySubject(
             Long subjectId) {
 
@@ -212,6 +223,7 @@ public class DocumentService {
                 .toList();
     }
 
+    // Download PDF from Supabase
     public ResponseEntity<Resource> downloadDocument(
             Long documentId) {
 
@@ -221,40 +233,29 @@ public class DocumentService {
                                 new RuntimeException(
                                         "Document not found"));
 
-        Path path =
-                Paths.get(document.getFilePath());
+        byte[] fileBytes =
+                supabaseStorageService.downloadFile(
+                        document.getFilePath()
+                );
 
-        try {
-            Resource resource =
-                    new UrlResource(path.toUri());
+        Resource resource =
+                new ByteArrayResource(fileBytes);
 
-            if (!resource.exists() ||
-                    !resource.isReadable()) {
-
-                throw new RuntimeException(
-                        "File not found");
-            }
-
-            return ResponseEntity.ok()
-                    .contentType(
-                            MediaType.parseMediaType(
-                                    document.getContentType()
-                            )
-                    )
-                    .header(
-                            HttpHeaders.CONTENT_DISPOSITION,
-                            "inline; filename=\"" +
-                                    document.getFileName() +
-                                    "\""
-                    )
-                    .body(resource);
-
-        } catch (IOException e) {
-            throw new RuntimeException(
-                    "Failed to read document", e);
-        }
+        return ResponseEntity.ok()
+                .contentType(
+                        MediaType.parseMediaType(
+                                document.getContentType()
+                        )
+                )
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" +
+                                document.getFileName() + "\""
+                )
+                .body(resource);
     }
 
+    // Delete PDF from Supabase and metadata from PostgreSQL
     public void deleteDocument(Long documentId) {
 
         Document document =
@@ -263,25 +264,22 @@ public class DocumentService {
                                 new RuntimeException(
                                         "Document not found"));
 
-        Path path =
-                Paths.get(document.getFilePath());
+        // Delete PDF from Supabase
+        supabaseStorageService.deleteFile(
+                document.getFilePath()
+        );
 
-        try {
-            Files.deleteIfExists(path);
-
-        } catch (IOException e) {
-            throw new RuntimeException(
-                    "Failed to delete document file", e);
-        }
-
+        // Delete document metadata from PostgreSQL
         documentRepository.delete(document);
     }
 
+    // Get document text chunks
     @Transactional
     public List<String> getTextChunks(Long documentId) {
 
         if (!documentRepository.existsById(documentId)) {
-            throw new RuntimeException("Document not found");
+            throw new RuntimeException(
+                    "Document not found");
         }
 
         return documentChunkRepository
